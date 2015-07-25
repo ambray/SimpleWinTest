@@ -314,20 +314,27 @@ static int run(PSLIST_HEADER hdr)
 	int status = ERROR_SUCCESS;
 	CHAR buffer[MAX_PATH + 1] = { 0 };
 	HANDLE hThread = NULL;
+	BOOL first = TRUE;
 	PTEST_ENTRY testEntry = NULL;
 	DWORD testCount = 0;
-
-	testEntry = (PTEST_ENTRY)&hdr->Next.Next;
-	while (NULL != testEntry) {
-		++testCount;
-		testEntry = (PTEST_ENTRY)testEntry->list.Next;
-	}
-	--testCount;
-	_snprintf(buffer, MAX_PATH, "%s %lu %s", "Preparing to run ", testCount, "tests.");
-
-	printColor(buffer, FOREGROUND_GREEN, SpacerCodeDoubleEncaps);
+	PTEST_ENTRY tmp = NULL;
 
 	while (NULL != (testEntry = (PTEST_ENTRY)InterlockedPopEntrySList(hdr))) {
+
+		if (first) {
+			testCount = 1;
+			tmp = testEntry->list.Next;
+			while (NULL != tmp) {
+				tmp = tmp->list.Next;
+				++testCount;
+			}
+
+			_snprintf(buffer, MAX_PATH, "%s %lu %s", "Preparing to run ", testCount, "tests.");
+			printColor(buffer, FOREGROUND_GREEN, SpacerCodeDoubleEncaps);
+
+			first = FALSE;
+		}
+
 		if (NULL == (hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)testRunner, testEntry, 0, NULL)))
 			continue;
 
