@@ -89,7 +89,7 @@ typedef struct {
 #define TEST_PREFIX(x, ...)	test_set_0af2c_ ## x ## _ ## __VA_ARGS__
 
 #ifdef __cplusplus
-#define TEST(set, func)	extern "C" DWORD __declspec(dllexport) WINAPI TEST_PREFIX(set, func)(PVOID ctx)
+#define TEST(set, func)	extern "C" void __declspec(dllexport) WINAPI TEST_PREFIX(set, func)(PVOID ctx)
 #else
 #define TEST(set, func)	void __declspec(dllexport) WINAPI TEST_PREFIX(set, func)(PTEST_CONTEXT TEST_CTX_PTR)
 #endif
