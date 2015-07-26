@@ -13,7 +13,16 @@ TEST(Initial, Derp)
 	PBYTE test = NULL;
 
 	printf("Derp\n");
+	FAIL_WITH_CODE(AssertFailFlagNotRestored);
 
+}
+
+TEST(Initial, AnotherTest)
+{
+	DWORD a = 10;
+	DWORD b = 9;
+
+	ASSERT_GT(a, b);
 }
 
 int main(int argc, char** argv, char** envp)

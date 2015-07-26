@@ -13,6 +13,7 @@ typedef enum {
 	SpacerCodeDoubleBottom,
 	SpacerCodeSingleEncaps = 5,
 	SpacerCodeDoubleEncaps = 7,
+	SpacerCodeNoBorder,
 } SpacerCodes;
 
 typedef enum {
@@ -75,6 +76,7 @@ typedef struct {
 	SLIST_ENTRY	list;
 	PCHAR		testName;
 	void(WINAPI *loc)(PTEST_CONTEXT);
+	AssertCode	testStatus;
 } TEST_ENTRY, *PTEST_ENTRY;
 
 
@@ -117,5 +119,5 @@ int runTests(HMODULE mod);
 #define FAIL()\
 	{ TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = AssertFailGeneric; return; }
 
-#define FAIL_WITH_CODE(code)\
-	{ TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = code; return; }
+#define FAIL_WITH_CODE(failCode)\
+	{ TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = failCode; return; }

@@ -8,6 +8,8 @@ static CHAR borders[] = {
 };
 
 static SLIST_HEADER gTestfuncHeader;
+static SLIST_HEADER gFailedTestHeader;
+
 static HANDLE gConsole;
 static CONSOLE_SCREEN_BUFFER_INFO gConInfo;
 static WORD gSavedAttribs = 0;
@@ -43,6 +45,35 @@ static int createTestEntry(PSLIST_HEADER hdr, PCHAR namePtr,  void(WINAPI *fptr)
 	return status;
 }
 
+static PCHAR __forceinline unmangle(PCHAR exportName, PCHAR prefix, BOOL isMutable)
+{
+	DWORD prefixLen = 0;
+	DWORD exportLen = 0;
+	PCHAR current = NULL;
+	PCHAR offset = NULL;
+
+	if (NULL == exportName || NULL == prefix) {
+		SetLastError(ERROR_INVALID_PARAMETER);
+		return NULL;
+	}
+
+	prefixLen = strlen(prefix);
+	exportLen = strlen(exportName);
+
+	if (exportLen <= prefixLen) {
+		SetLastError(ERROR_INVALID_PARAMETER);
+		return NULL;
+	}
+
+	current = (PCHAR)(exportName + prefixLen);
+
+	if (isMutable && NULL != (offset = strstr(exportName, "@4"))) {
+		*offset = '\0';
+	}
+
+	return current;
+}
+
 // Prints a border covering the width of the console (or MAX_PATH
 // if the console width exceeds the stack-allocated buffer size).
 static void __forceinline printSpacer(CHAR border)
@@ -73,7 +104,7 @@ static void printColor(PCHAR text, WORD color, SpacerCodes spacer)
 	CHAR buffer[MAX_PATH + 1] = { 0 };
 	DWORD len = 0;
 
-	_snprintf(buffer, MAX_PATH, "|\t%s", text);
+	_snprintf(buffer, MAX_PATH, "| %s", text);
 
 	if (spacer == SpacerCodeSingleBottom || spacer == SpacerCodeSingleTop || spacer == SpacerCodeSingleEncaps) {
 		code = borders[0];
@@ -84,7 +115,7 @@ static void printColor(PCHAR text, WORD color, SpacerCodes spacer)
 		code = borders[2];
 	}
 
-	if (spacer & 1)
+	if (!(spacer == SpacerCodeNoBorder) && (spacer & 1))
 		printSpacer(code);
 
 	if (INVALID_HANDLE_VALUE != gConsole)
@@ -92,7 +123,7 @@ static void printColor(PCHAR text, WORD color, SpacerCodes spacer)
 
 	printf("%s\n", buffer);
 
-	if (SpacerCodeDoubleEncaps == spacer || SpacerCodeSingleEncaps == spacer || !(spacer & 1))
+	if (!(SpacerCodeNoBorder == spacer) && (SpacerCodeDoubleEncaps == spacer || SpacerCodeSingleEncaps == spacer || !(spacer & 1)))
 		printSpacer(code);
 
 	if (INVALID_HANDLE_VALUE != gConsole && gSavedAttribs)
@@ -104,24 +135,21 @@ static int printBegin(PCHAR exportName)
 {
 	int status = ERROR_SUCCESS;
 	CHAR buffer[MAX_PATH + 1] = { 0 };
-	DWORD exportLen = 0;
-	DWORD prefixLen = 0;
+	PCHAR offset = NULL;
 	PCHAR current = NULL;
 
 	if (NULL == exportName)
 		return ERROR_INVALID_PARAMETER;
 
-	prefixLen = strlen(TEST_STRING);
-	exportLen = strlen(exportName);
+	if (NULL == (current = unmangle(exportName, TEST_STRING, FALSE))) {
+		return GetLastError();
+	}
 
-	if (exportLen <= prefixLen)
-		return ERROR_INVALID_PARAMETER;
-
-	current = (PCHAR)(exportName + prefixLen);
 	_snprintf(buffer, MAX_PATH, "[*] Preparing to run %s...", current);
 #ifndef _WIN64
-	exportLen = strlen(buffer);
-	buffer[exportLen - 5] = '\0'; // remove stdcall name decoration
+	if (NULL != (offset = strstr(buffer, "@4"))) {
+		*offset = '\0'; // remove stdcall name decoration
+	}
 #endif
 		
 	printColor(buffer, FOREGROUND_GREEN, SpacerCodeSingleTop);
@@ -303,7 +331,43 @@ static DWORD testRunner(PTEST_ENTRY test)
 	}
 
 	printStatus(&ctx, status);
+
+	test->testStatus = ctx.code;
+
 	return status;
+}
+
+
+// Prints the test results, giving a brief synopsys of what did and didn't pass.
+static void printFailed(PSLIST_HEADER hdr, DWORD failCount, DWORD testCount)
+{
+	CHAR buffer[MAX_PATH + 1] = { 0 };
+	PTEST_ENTRY tmp = NULL;
+	PCHAR offset = NULL;
+
+	if (NULL == hdr || failCount > testCount)
+		return;
+
+	_snprintf(buffer, MAX_PATH, "Tests Complete. Status: %lu out of %lu succeeded.", testCount - failCount, testCount);
+
+	printColor(buffer, FOREGROUND_GREEN, SpacerCodeDoubleEncaps);
+
+	printSpacer(borders[0]);
+
+	if (failCount > 0) {
+		while (NULL != (tmp = InterlockedPopEntrySList(hdr))) {
+			ZeroMemory(buffer, MAX_PATH);
+			_snprintf(buffer, MAX_PATH, "Test %s failed with code %lu", unmangle(tmp->testName, TEST_STRING, TRUE), tmp->testStatus);
+
+			printColor(buffer, FOREGROUND_RED, SpacerCodeNoBorder);
+
+			HeapFree(GetProcessHeap(), 0, tmp->testName);
+			HeapFree(GetProcessHeap(), 0, tmp);
+		}
+	}
+
+	printSpacer(borders[0]);
+
 }
 
 // This runs each test in sequence. In the future, it will likely
@@ -317,6 +381,7 @@ static int run(PSLIST_HEADER hdr)
 	BOOL first = TRUE;
 	PTEST_ENTRY testEntry = NULL;
 	DWORD testCount = 0;
+	DWORD failCount = 0;
 	PTEST_ENTRY tmp = NULL;
 
 	while (NULL != (testEntry = (PTEST_ENTRY)InterlockedPopEntrySList(hdr))) {
@@ -340,10 +405,19 @@ static int run(PSLIST_HEADER hdr)
 
 		WaitForSingleObject(hThread, INFINITE);
 		CloseHandle(hThread);
-		// cleanup
-		HeapFree(GetProcessHeap(), 0, testEntry->testName);
-		HeapFree(GetProcessHeap(), 0, testEntry);
+
+		if (AssertSuccess != testEntry->testStatus) {
+			InterlockedIncrement(&failCount);
+			InterlockedPushEntrySList(&gFailedTestHeader, &testEntry->list);
+		}
+		else {
+			// cleanup
+			HeapFree(GetProcessHeap(), 0, testEntry->testName);
+			HeapFree(GetProcessHeap(), 0, testEntry);
+		}
 	}
+
+	printFailed(&gFailedTestHeader, failCount, testCount);
 
 	return status;
 }
@@ -381,6 +455,7 @@ int runTests(HMODULE mod)
 	int status = ERROR_SUCCESS;
 
 	InitializeSListHead(&gTestfuncHeader);
+	InitializeSListHead(&gFailedTestHeader);
 	testOn = getHmod(mod);
 
 	__try {
