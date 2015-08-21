@@ -169,7 +169,13 @@ static int printStatus(PTEST_CONTEXT ctx, DWORD stat)
 
 	switch (ctx->code) {
 	case AssertSuccess:
-		string = "The task completed successfully.";
+		string = "The test passed successfully with code: ";
+		break;
+	case AssertFailNotTrue:
+		string = "The provided item was not true! Test failed around line: ";
+		break;
+	case AssertFailNotFalse:
+		string = "The provided item provided was not false! Test failed around line: ";
 		break;
 	case AssertFailApiError:
 		string = "An API Failure has occurred around line: ";

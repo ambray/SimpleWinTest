@@ -18,6 +18,8 @@ typedef enum {
 
 typedef enum {
 	AssertSuccess,
+	AssertFailNotTrue,
+	AssertFailNotFalse,
 	AssertFailNotEq,
 	AssertFailNotLt,
 	AssertFailNotGt,
@@ -91,12 +93,18 @@ typedef struct {
 #define TEST_PREFIX(x, ...)	test_set_0af2c_ ## x ## _ ## __VA_ARGS__
 
 #ifdef __cplusplus
-#define TEST(set, func)	extern "C" void __declspec(dllexport) WINAPI TEST_PREFIX(set, func)(PVOID ctx)
+#define TEST(set, func)	extern "C" void __declspec(dllexport) WINAPI TEST_PREFIX(set, func)(PTEST_CONTEXT TEST_CTX_PTR)
 #else
 #define TEST(set, func)	void __declspec(dllexport) WINAPI TEST_PREFIX(set, func)(PTEST_CONTEXT TEST_CTX_PTR)
 #endif
 
 int runTests(HMODULE mod);
+
+#define ASSERT_TRUE(x)\
+	if(!x) { TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = AssertFailNotTrue; return; }
+
+#define ASSERT_FALSE(x)\
+	if(x) { TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = AssertFailNotFalse; return; }
 
 #define ASSERT_EQUAL(x, y)\
 	if(x != y) { TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = AssertFailNotEq; return; }
