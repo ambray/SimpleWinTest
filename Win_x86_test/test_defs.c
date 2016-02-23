@@ -161,6 +161,7 @@ static int printBegin(PCHAR exportName)
 static int printStatus(PTEST_CONTEXT ctx, DWORD stat)
 {
 	int status = ERROR_SUCCESS;
+	WORD color = FOREGROUND_GREEN;
 	CHAR buffer[MAX_PATH + 1] = { 0 };
 	PCHAR string = NULL;
 	PCHAR prefix = NULL;
@@ -168,6 +169,9 @@ static int printStatus(PTEST_CONTEXT ctx, DWORD stat)
 	prefix = (AssertSuccess == ctx->code) ? "[*]" : "[x]";
 
 	switch (ctx->code) {
+	case TestSkipped:
+		string = "The test has been skipped. ";
+		break;
 	case AssertSuccess:
 		string = "The test passed successfully with code: ";
 		break;
@@ -222,7 +226,12 @@ static int printStatus(PTEST_CONTEXT ctx, DWORD stat)
 
 	_snprintf(buffer, MAX_PATH, "%s %s %lu", prefix, string, ctx->line);
 
-	printColor(buffer, (ctx->code == AssertSuccess) ? FOREGROUND_GREEN : FOREGROUND_RED, SpacerCodeSingleBottom);
+	if (ctx->code == AssertSuccess)
+		color = FOREGROUND_GREEN;
+	else
+		color = (ctx->code == TestSkipped) ? YELLOW : FOREGROUND_RED;
+
+	printColor(buffer, color, SpacerCodeSingleBottom);
 
 	return status;
 }
@@ -350,6 +359,8 @@ static void printFailed(PSLIST_HEADER hdr, DWORD failCount, DWORD testCount)
 	CHAR buffer[MAX_PATH + 1] = { 0 };
 	PTEST_ENTRY tmp = NULL;
 	PCHAR offset = NULL;
+	WORD color = FOREGROUND_RED;
+	char* failString = NULL;
 
 	if (NULL == hdr || failCount > testCount)
 		return;
@@ -363,9 +374,13 @@ static void printFailed(PSLIST_HEADER hdr, DWORD failCount, DWORD testCount)
 	if (failCount > 0) {
 		while (NULL != (tmp = InterlockedPopEntrySList(hdr))) {
 			ZeroMemory(buffer, MAX_PATH);
-			_snprintf(buffer, MAX_PATH, "Test %s failed with code %lu", unmangle(tmp->testName, TEST_STRING, TRUE), tmp->testStatus);
+			color = (tmp->testStatus == TestSkipped) ? YELLOW : FOREGROUND_RED;
+			failString = (tmp->testStatus == TestSkipped) ? "Test %s was skipped. %lu" : "Test %s failed with code %lu";
+			_snprintf(buffer, MAX_PATH, failString, unmangle(tmp->testName, TEST_STRING, TRUE), tmp->testStatus);
 
-			printColor(buffer, FOREGROUND_RED, SpacerCodeNoBorder);
+
+
+			printColor(buffer, color, SpacerCodeNoBorder);
 
 			HeapFree(GetProcessHeap(), 0, tmp->testName);
 			HeapFree(GetProcessHeap(), 0, tmp);

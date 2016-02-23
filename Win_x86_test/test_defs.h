@@ -5,6 +5,7 @@
 #include <ImageHlp.h>
 
 #define COOKIE	0xc0ffee
+#define YELLOW	0x000006
 
 typedef enum {
 	SpacerCodeSingleTop = 1,
@@ -33,6 +34,7 @@ typedef enum {
 	AssertFailApiError,
 	AssertFailStackBroken,
 	AssertFailException,
+	TestSkipped,
 } AssertCode;
 
 AssertCode __forceinline validateContext(PCONTEXT oldCtx, PCONTEXT newCtx)
@@ -129,3 +131,10 @@ int runTests(HMODULE mod);
 
 #define FAIL_WITH_CODE(failCode)\
 	{ TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = failCode; return; }
+
+#define SKIP_IF(x)\
+	if(x) { TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = TestSkipped; return; }
+
+#define ASSERT_OR_SKIP(x,y,sk)\
+	do { if(y == sk) { TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = TestSkipped; return; };\
+    if(x != y) { TEST_CTX_PTR->line = __LINE__; TEST_CTX_PTR->code = AssertFailNotEq; return; } } while(0)
